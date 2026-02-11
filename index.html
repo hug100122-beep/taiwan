@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台灣漫旅挑選器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #fefae0; }
+        .spinner-btn { transition: transform 0.1s; }
+        .spinner-btn:active { transform: translate(-50%, -50%) scale(0.9); }
+        .result-card { animation: fadeInUp 0.7s; }
+    </style>
+</head>
+<body class="text-[#283618] p-6">
+
+    <header class="max-w-4xl mx-auto text-center mb-10">
+        <h1 class="text-4xl font-black flex items-center justify-center gap-3">
+            ✨ 台灣漫旅挑選器
+        </h1>
+        <p class="text-[#bc6c25] mt-2 font-medium italic">讓命運決定下一趟旅程</p>
+    </header>
+
+    <main class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <!-- 轉盤區 -->
+        <div class="bg-[#faedcd] p-8 rounded-[3rem] shadow-xl border-4 border-white flex flex-col items-center">
+            <div class="text-center mb-8 w-full flex flex-col items-center">
+                <h2 class="text-xl font-bold mb-6 flex items-center justify-center gap-2">
+                    🧭 第一步：選擇方位
+                </h2>
+                <div class="relative inline-block bg-white p-4 rounded-full shadow-inner border-4 border-[#d4a373]">
+                    <canvas id="regionCanvas" width="320" height="320" class="rounded-full"></canvas>
+                    <button id="regionBtn" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-[#bc6c25] text-white font-black shadow-2xl z-20 spinner-btn">
+                        開始
+                    </button>
+                    <div class="absolute top-1/2 -right-4 -translate-y-1/2 w-0 h-0 border-y-[15px] border-y-transparent border-r-[30px] border-r-[#283618]"></div>
+                </div>
+                <button id="shuffleBtn" class="mt-6 text-xs font-bold text-[#bc6c25] hover:underline">
+                    🎲 重新洗牌
+                </button>
+            </div>
+
+            <div id="citySection" class="hidden text-center animate__animated animate__zoomIn w-full pt-8 border-t border-[#d4a373]/30 flex flex-col items-center">
+                <h2 class="text-xl font-bold mb-6">第二步：決定城市</h2>
+                <div class="relative inline-block bg-white p-4 rounded-full shadow-inner border-4 border-[#e9edc9]">
+                    <canvas id="cityCanvas" width="240" height="240" class="rounded-full"></canvas>
+                    <button id="cityBtn" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-[#283618] text-white font-bold z-20 spinner-btn">
+                        GO
+                    </button>
+                    <div class="absolute top-1/2 -right-4 -translate-y-1/2 w-0 h-0 border-y-[12px] border-y-transparent border-r-[25px] border-r-[#283618]"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 結果顯示區 -->
+        <div id="displayArea" class="flex flex-col gap-6">
+            <div id="placeholder" class="h-full flex flex-col items-center justify-center bg-white/50 border-4 border-dashed border-[#d4a373]/30 rounded-[3rem] p-12 text-center text-[#bc6c25]/40">
+                <div class="text-6xl mb-4 opacity-20">📍</div>
+                <p class="text-xl font-bold">等待命運的指引...</p>
+                <p class="text-xs mt-2 italic opacity-60">蘭嶼 & 金門馬祖各佔 5% 機率</p>
+            </div>
+            
+            <div id="resultContent" class="hidden animate__animated animate__fadeInUp">
+                <!-- 由 JS 動態生成 -->
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const RAW_REGIONS = [
+            { id: 'north', name: '北部', weight: 3.75, isIsland: false, color: '#d4a373' },
+            { id: 'central', name: '中部', weight: 3.75, isIsland: false, color: '#a98467' },
+            { id: 'south', name: '南部', weight: 3.75, isIsland: false, color: '#adc178' },
+            { id: 'east', name: '東部', weight: 3.75, isIsland: false, color: '#6b705c' },
+            { id: 'penghu', name: '澎湖', weight: 1, isIsland: true, color: '#457b9d' },
+            { id: 'liuqiu', name: '小琉球', weight: 1, isIsland: true, color: '#2a9d8f' },
+            { id: 'kinma', name: '金門馬祖', weight: 1, isIsland: true, color: '#8d99ae' },
+            { id: 'green_island', name: '綠島', weight: 1, isIsland: true, color: '#588157' },
+            { id: 'lanyu', name: '蘭嶼', weight: 1, isIsland: true, color: '#386641' }
+        ];
+
+        const TAIWAN_DATA = {
+            north: {
+                cities: ['台北市', '新北市', '桃園市', '基隆市', '新竹縣', '新竹市'],
+                details: {
+                    '台北市': { area: '信義區、大同區', hotels: [{name: '晶華酒店', price: 6500, rating: 4.8}, {name: '台北時代寓所', price: 5200, rating: 4.7}], attractions: ['台北101', '故宮博物院', '大稻埕碼頭'], foods: ['牛肉麵', '小籠包', '寧夏夜市滷肉飯'] },
+                    '新北市': { area: '瑞芳區、九份', hotels: [{name: '板橋凱撒大飯店', price: 4200, rating: 4.6}, {name: '九份山經', price: 3500, rating: 4.5}], attractions: ['九份老街', '十分瀑布', '淡水漁人碼頭'], foods: ['阿給', '魚酥', '深坑臭豆腐'] },
+                    '桃園市': { area: '中壢區、大溪區', hotels: [{name: '和逸飯店桃園館', price: 4800, rating: 4.7}, {name: '大溪笠復威斯汀', price: 9500, rating: 4.9}], attractions: ['大溪老街', 'Xpark水族館', '石門水庫'], foods: ['大溪豆乾', '龍岡米干', '活魚三吃'] },
+                    '基隆市': { area: '仁愛區、中正區', hotels: [{name: '長榮桂冠酒店', price: 3800, rating: 4.5}, {name: '雨港有節', price: 2800, rating: 4.6}], attractions: ['基隆廟口', '正濱漁港彩虹屋', '和平島公園'], foods: ['鼎邊薖', '泡泡冰', '營養三明治'] },
+                    '新竹縣': { area: '竹北市、橫山鄉', hotels: [{name: '新竹喜來登', price: 5500, rating: 4.7}, {name: '六福莊生態旅館', price: 8800, rating: 4.6}], attractions: ['內灣老街', '六福村', '司馬庫斯'], foods: ['野薑花粽', '客家擂茶', '板條'] },
+                    '新竹市': { area: '北區、東區', hotels: [{name: '新竹老爺酒店', price: 4500, rating: 4.6}, {name: '新竹國賓', price: 4300, rating: 4.5}], attractions: ['城隍廟', '南寮漁港', '新竹動物園'], foods: ['貢丸湯', '米粉', '肉圓'] }
+                }
+            },
+            central: {
+                cities: ['台中市', '彰化縣', '南投縣', '苗栗縣', '雲林縣'],
+                details: {
+                    '台中市': { area: '西屯區、南屯區', hotels: [{name: '林酒店', price: 5800, rating: 4.7}, {name: '逢甲智選假日', price: 3200, rating: 4.5}], attractions: ['高美濕地', '歌劇院', '審計新村'], foods: ['太陽餅', '大麵羹', '逢甲夜市地瓜球'] },
+                    '彰化縣': { area: '鹿港鎮、彰化市', hotels: [{name: '鹿港永樂酒店', price: 4500, rating: 4.7}, {name: '彰化福泰', price: 3000, rating: 4.4}], attractions: ['鹿港天后宮', '八卦山大佛', '扇形車庫'], foods: ['彰化肉圓', '爌肉飯', '鹿港麵線糊'] },
+                    '南投縣': { area: '魚池鄉、仁愛鄉', hotels: [{name: '雲品溫泉酒店', price: 15000, rating: 4.9}, {name: '清境老英格蘭', price: 12000, rating: 4.8}], attractions: ['日月潭', '清境農場', '合歡山'], foods: ['總統魚', '甕仔雞', '高山高麗菜'] },
+                    '苗栗縣': { area: '三義鄉、南庄鄉', hotels: [{name: '泰安觀止', price: 8500, rating: 4.7}, {name: '南庄雲水', price: 4200, rating: 4.6}], attractions: ['龍騰斷橋', '勝興車站', '南庄老街'], foods: ['客家小炒', '薑絲大腸', '擂茶'] },
+                    '雲林縣': { area: '斗六市、古坑鄉', hotels: [{name: '劍湖山大飯店', price: 4500, rating: 4.5}, {name: '斗六三好酒店', price: 3200, rating: 4.4}], attractions: ['雲林布袋戲館', '太平老街', '古坑綠色隧道'], foods: ['斗六肉圓', '古坑咖啡', '虎尾糖廠冰棒'] }
+                }
+            },
+            south: {
+                cities: ['高雄市', '台南市', '嘉義縣', '嘉義市', '屏東縣'],
+                details: {
+                    '高雄市': { area: '鼓山區、鹽埕區', hotels: [{name: '高雄萬豪', price: 5500, rating: 4.8}, {name: '承億酒店', price: 6500, rating: 4.9}], attractions: ['駁二藝術特區', '西子灣', '旗津'], foods: ['丹丹漢堡', '鴨肉珍', '旗津烤小卷'] },
+                    '台南市': { area: '中西區、安平區', hotels: [{name: '台南晶英', price: 5200, rating: 4.9}, {name: '友愛街旅館', price: 3800, rating: 4.8}], attractions: ['奇美博物館', '安平古堡', '神農街'], foods: ['牛肉湯', '鱔魚意麵', '棺材板', '小卷米粉'] },
+                    '嘉義縣': { area: '阿里山鄉、民雄鄉', hotels: [{name: '阿里山賓館', price: 9500, rating: 4.7}, {name: '長榮文苑', price: 4500, rating: 4.6}], attractions: ['阿里山森林遊樂區', '高跟鞋教堂', '故宮南院'], foods: ['民雄鵝肉', '奮起湖便當', '阿里山愛玉'] },
+                    '嘉義市': { area: '東區、西區', hotels: [{name: '耐斯王子飯店', price: 4800, rating: 4.6}, {name: '嘉義嘉楠風華', price: 3500, rating: 4.5}], attractions: ['檜意森活村', '蘭潭噴泉', '文化路夜市'], foods: ['雞肉飯', '林聰明砂鍋魚頭', '御香屋'] },
+                    '屏東縣': { area: '恆春鎮、車城鄉', hotels: [{name: '華泰瑞苑', price: 11000, rating: 4.9}, {name: '墾丁大街', price: 6500, rating: 4.7}], attractions: ['墾丁大街', '海生館', '鵝鑾鼻燈塔'], foods: ['恆春綠豆蒜', '萬巒豬腳', '屏東肉圓'] }
+                }
+            },
+            east: {
+                cities: ['花蓮縣', '台東縣', '宜蘭縣'],
+                details: {
+                    '花蓮縣': { area: '秀林鄉、花蓮市', hotels: [{name: '太魯閣晶英', price: 12000, rating: 4.9}, {name: '煙波大飯店', price: 4500, rating: 4.7}], attractions: ['太魯閣', '七星潭', '清水斷崖'], foods: ['液香扁食', '公正包子', '炸彈蔥油餅'] },
+                    '台東縣': { area: '鹿野鄉、卑南鄉', hotels: [{name: '知本老爺', price: 7500, rating: 4.8}, {name: 'The Gaya Hotel', price: 4800, rating: 4.7}], attractions: ['鹿野高台', '三仙台', '多良車站'], foods: ['米苔目', '炸雞', '地瓜酥'] },
+                    '宜蘭縣': { area: '礁溪鄉、羅東鎮', hotels: [{name: '礁溪老爺', price: 11000, rating: 4.9}, {name: '羅東村却', price: 6800, rating: 4.7}], attractions: ['抹茶山', '傳藝中心', '羅東林場'], foods: ['三星蔥油餅', '鴨賞', '羅東肉羹'] }
+                }
+            },
+            islands: {
+                'penghu': { name: '澎湖', area: '馬公市、白沙鄉', hotels: [{name: '澎湖喜來登', price: 6000, rating: 4.8}, {name: '綠的旅店', price: 3200, rating: 4.6}], attractions: ['雙心石滬', '跨海大橋', '奎壁山摩西分海'], foods: ['仙人掌冰', '黑糖糕', '小管麵線'] },
+                'liuqiu': { name: '小琉球', area: '屏東縣琉球鄉', hotels: [{name: '小琉球小福宿', price: 3800, rating: 4.7}, {name: '朵小路北歐民宿', price: 4200, rating: 4.8}], attractions: ['花瓶岩', '蛤板灣', '美人洞浮潛'], foods: ['起司捲', '麻花捲', '蜂巢蝦'] },
+                'kinma': { name: '金門馬祖', area: '金門、馬祖', hotels: [{name: '金門昇恆昌', price: 4500, rating: 4.7}, {name: '馬祖芹壁村', price: 3500, rating: 4.8}], attractions: ['金門莒光樓', '馬祖藍眼淚', '芹壁聚落'], foods: ['廣東粥', '炒泡麵', '繼光餅'] },
+                'green_island': { name: '綠島', area: '台東縣綠島鄉', hotels: [{name: '綠島好漁民宿', price: 3200, rating: 4.6}, {name: '綠島雍雅民宿', price: 2800, rating: 4.5}], attractions: ['朝日溫泉', '大白沙', '綠島監獄'], foods: ['芡粿', '海草冰', '鹿肉乾'] },
+                'lanyu': { name: '蘭嶼', area: '台東縣蘭嶼鄉', hotels: [{name: '蘭嶼阿力給民宿', price: 3000, rating: 4.7}, {name: '蘭嶼天空的眼睛', price: 4500, rating: 4.9}], attractions: ['青青草原', '大天池', '東清秘境'], foods: ['飛魚料理', '林投果汁', '水芋餅'] }
+            }
+        };
+
+        // State variables
+        let regions = [...RAW_REGIONS];
+        let currentRegionId = null;
+        let selectedCity = null;
+        let isSpinningRegion = false;
+        let isStoppingRegion = false;
+        let isSpinningCity = false;
+
+        let regionRotation = 0;
+        let cityRotation = 0;
+        let velocity = 0;
+        let regionReq = null;
+
+        const regionCanvas = document.getElementById('regionCanvas');
+        const cityCanvas = document.getElementById('cityCanvas');
+        const regionBtn = document.getElementById('regionBtn');
+        const cityBtn = document.getElementById('cityBtn');
+        const shuffleBtn = document.getElementById('shuffleBtn');
+        const citySection = document.getElementById('citySection');
+        const placeholder = document.getElementById('placeholder');
+        const resultContent = document.getElementById('resultContent');
+
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function drawRegionWheel(angle) {
+            const ctx = regionCanvas.getContext('2d');
+            const totalWeight = regions.reduce((acc, r) => acc + r.weight, 0);
+            const centerX = regionCanvas.width / 2;
+            const centerY = regionCanvas.height / 2;
+            const radius = regionCanvas.width / 2 - 10;
+
+            ctx.clearRect(0, 0, regionCanvas.width, regionCanvas.height);
+            let currentArc = angle;
+
+            regions.forEach((r, i) => {
+                const arcSize = (r.weight / totalWeight) * 2 * Math.PI;
+                ctx.beginPath();
+                ctx.fillStyle = i % 2 === 0 ? r.color : '#fefae0';
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, currentArc, currentArc + arcSize);
+                ctx.fill();
+                ctx.strokeStyle = '#283618';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(currentArc + arcSize / 2);
+                ctx.fillStyle = i % 2 === 0 ? '#fefae0' : '#283618';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillText(r.name, radius - 15, 5);
+                ctx.restore();
+                currentArc += arcSize;
+            });
+        }
+
+        function drawCityWheel(angle) {
+            if (!currentRegionId) return;
+            const cities = TAIWAN_DATA[currentRegionId].cities;
+            const ctx = cityCanvas.getContext('2d');
+            const arc = (2 * Math.PI) / cities.length;
+            const centerX = cityCanvas.width / 2;
+            const centerY = cityCanvas.height / 2;
+            const radius = cityCanvas.width / 2 - 10;
+            const color = regions.find(r => r.id === currentRegionId).color;
+
+            ctx.clearRect(0, 0, cityCanvas.width, cityCanvas.height);
+            cities.forEach((city, i) => {
+                const curA = angle + i * arc;
+                ctx.beginPath();
+                ctx.fillStyle = i % 2 === 0 ? color : '#fefae0';
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, curA, curA + arc);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(curA + arc / 2);
+                ctx.fillStyle = i % 2 === 0 ? '#fefae0' : '#283618';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillText(city, radius - 20, 5);
+                ctx.restore();
+            });
+        }
+
+        function showResult(data, name) {
+            placeholder.classList.add('hidden');
+            resultContent.classList.remove('hidden');
+            
+            resultContent.innerHTML = `
+                <div class="bg-[#bc6c25] p-8 rounded-[3rem] text-[#fefae0] shadow-2xl relative overflow-hidden mb-8">
+                    <div class="relative z-10">
+                        <span class="text-xs font-black tracking-widest uppercase opacity-70">本日目的地</span>
+                        <h2 class="text-5xl font-black mt-2">${name}</h2>
+                        <div class="mt-4 flex gap-3">
+                            <div class="bg-white/20 px-4 py-1 rounded-full text-sm font-bold backdrop-blur-md border border-white/20 flex items-center gap-1">
+                                🧭 ${data.area}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="absolute -bottom-6 -right-6 text-9xl opacity-10 rotate-12">⚓</div>
+                </div>
+
+                <div class="grid gap-6">
+                    <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-[#e9edc9]">
+                        <h3 class="font-black text-lg mb-4 flex items-center gap-2 border-b-2 border-[#fefae0] pb-2 text-[#283618]">
+                            ⭐ 精選住宿推薦
+                        </h3>
+                        <div class="space-y-4">
+                            ${data.hotels.map(h => `
+                                <div class="flex justify-between items-center bg-[#fefae0]/40 p-4 rounded-2xl">
+                                    <div>
+                                        <p class="font-bold text-[#283618]">${h.name}</p>
+                                        <p class="text-xs font-black text-[#bc6c25] mt-1">⭐ ${h.rating} / 5.0</p>
+                                    </div>
+                                    <p class="text-xl font-black text-[#bc6c25]"><span class="text-xs">NT$</span> ${h.price.toLocaleString()}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-[#e9edc9]">
+                            <h3 class="font-black text-sm mb-3 text-[#bc6c25] uppercase tracking-wider">📍 必遊景點</h3>
+                            <ul class="space-y-2">
+                                ${data.attractions.map(a => `<li class="text-xs font-bold flex items-center gap-2 bg-[#fefae0] p-2 rounded-lg">🏕️ ${a}</li>`).join('')}
+                            </ul>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-[#e9edc9]">
+                            <h3 class="font-black text-sm mb-3 text-[#bc6c25] uppercase tracking-wider">🍜 在地美食</h3>
+                            <ul class="space-y-2">
+                                ${data.foods.map(f => `<li class="text-xs font-bold flex items-center gap-2 bg-[#fefae0] p-2 rounded-lg">🍴 ${f}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        regionBtn.addEventListener('click', () => {
+            if (!isSpinningRegion) {
+                currentRegionId = null;
+                selectedCity = null;
+                resultContent.classList.add('hidden');
+                placeholder.classList.remove('hidden');
+                citySection.classList.add('hidden');
+                isSpinningRegion = true;
+                isStoppingRegion = false;
+                velocity = 0.5;
+                
+                function run() {
+                    regionRotation += velocity;
+                    drawRegionWheel(regionRotation);
+                    if (velocity > 0) regionReq = requestAnimationFrame(run);
+                }
+                regionReq = requestAnimationFrame(run);
+                regionBtn.innerText = '停止';
+            } else if (!isStoppingRegion) {
+                isStoppingRegion = true;
+                regionBtn.innerText = '等候';
+                
+                function decay() {
+                    velocity *= 0.985;
+                    if (velocity < 0.002) {
+                        cancelAnimationFrame(regionReq);
+                        isSpinningRegion = false;
+                        isStoppingRegion = false;
+                        regionBtn.innerText = '開始';
+
+                        const totalWeight = regions.reduce((acc, r) => acc + r.weight, 0);
+                        const normalizedAngle = (2 * Math.PI - (regionRotation % (2 * Math.PI))) % (2 * Math.PI);
+                        let acc = 0;
+                        let winner = regions[0];
+                        for(let r of regions) {
+                            const size = (r.weight/totalWeight)*2*Math.PI;
+                            if(normalizedAngle >= acc && normalizedAngle < acc + size) { winner = r; break; }
+                            acc += size;
+                        }
+
+                        currentRegionId = winner.id;
+                        if (winner.isIsland) {
+                            showResult(TAIWAN_DATA.islands[winner.id], winner.name);
+                        } else {
+                            citySection.classList.remove('hidden');
+                            drawCityWheel(0);
+                        }
+                    } else {
+                        requestAnimationFrame(decay);
+                    }
+                }
+                requestAnimationFrame(decay);
+            }
+        });
+
+        cityBtn.addEventListener('click', () => {
+            if (isSpinningCity) return;
+            isSpinningCity = true;
+            resultContent.classList.add('hidden');
+            
+            const cities = TAIWAN_DATA[currentRegionId].cities;
+            const duration = 2500;
+            const start = performance.now();
+            const spinAmount = (6 + Math.random() * 6) * 2 * Math.PI;
+            const initialRotation = cityRotation;
+
+            function anim(now) {
+                const p = Math.min((now - start) / duration, 1);
+                const ease = 1 - Math.pow(1 - p, 4);
+                const current = initialRotation + spinAmount * ease;
+                drawCityWheel(current);
+                
+                if (p < 1) {
+                    requestAnimationFrame(anim);
+                } else {
+                    cityRotation = current;
+                    isSpinningCity = false;
+                    const arc = (2 * Math.PI) / cities.length;
+                    const norm = (2 * Math.PI - (current % (2 * Math.PI))) % (2 * Math.PI);
+                    selectedCity = cities[Math.floor(norm / arc)];
+                    showResult(TAIWAN_DATA[currentRegionId].details[selectedCity], selectedCity);
+                }
+            }
+            requestAnimationFrame(anim);
+        });
+
+        shuffleBtn.addEventListener('click', () => {
+            regions = shuffle([...RAW_REGIONS]);
+            drawRegionWheel(0);
+        });
+
+        // Init
+        window.onload = () => {
+            regions = shuffle([...RAW_REGIONS]);
+            drawRegionWheel(0);
+        };
+    </script>
+</body>
+</html>
