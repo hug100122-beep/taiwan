@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MapPin, Navigation, Star, RotateCw, Utensils, Compass, Sparkles, Tent, Anchor } from 'lucide-react';
 
-// 調整後的區域定義
-// 總權重設定為 20
-// 金門馬祖(1/20), 蘭嶼(1/20), 其他離島各1, 剩下的 15 權重由本島四區平分 (各 3.75)
+/**
+ * 區域權重定義
+ * 總權重設定為 20
+ * 蘭嶼與金馬各佔 1/20 (5%)，本島四區平分剩餘權重 (各 18.75%)
+ */
 const RAW_REGIONS = [
   { id: 'north', name: '北部', weight: 3.75, isIsland: false, color: '#d4a373' },
   { id: 'central', name: '中部', weight: 3.75, isIsland: false, color: '#a98467' },
@@ -11,9 +13,9 @@ const RAW_REGIONS = [
   { id: 'east', name: '東部', weight: 3.75, isIsland: false, color: '#6b705c' },
   { id: 'penghu', name: '澎湖', weight: 1, isIsland: true, color: '#457b9d' },
   { id: 'liuqiu', name: '小琉球', weight: 1, isIsland: true, color: '#2a9d8f' },
-  { id: 'kinma', name: '金門馬祖', weight: 1, isIsland: true, color: '#8d99ae' }, // 1/20
+  { id: 'kinma', name: '金門馬祖', weight: 1, isIsland: true, color: '#8d99ae' },
   { id: 'green_island', name: '綠島', weight: 1, isIsland: true, color: '#588157' },
-  { id: 'lanyu', name: '蘭嶼', weight: 1, isIsland: true, color: '#386641' }  // 1/20
+  { id: 'lanyu', name: '蘭嶼', weight: 1, isIsland: true, color: '#386641' }
 ];
 
 const shuffleArray = (array) => {
@@ -25,6 +27,7 @@ const shuffleArray = (array) => {
   return newArr;
 };
 
+// 台灣旅遊景點、住宿與美食資料庫
 const TAIWAN_DATA = {
   north: {
     cities: ['台北市', '新北市', '桃園市', '基隆市', '新竹縣', '新竹市'],
@@ -90,10 +93,12 @@ export default function App() {
   const velocityRef = useRef(0);
   const regionRequestRef = useRef(null);
 
+  // 初始化時隨機排列轉盤內容，讓視覺效果更活潑
   useEffect(() => {
     setRegions(shuffleArray(RAW_REGIONS));
   }, []);
 
+  // 繪製區域轉盤
   const drawRegionWheel = (angle) => {
     const canvas = regionCanvasRef.current;
     if (!canvas || regions.length === 0) return;
@@ -114,8 +119,10 @@ export default function App() {
       ctx.arc(centerX, centerY, radius, currentArc, currentArc + arcSize);
       ctx.fill();
       ctx.strokeStyle = '#283618';
+      ctx.lineWidth = 1;
       ctx.stroke();
 
+      // 繪製文字
       ctx.save();
       ctx.translate(centerX, centerY);
       ctx.rotate(currentArc + arcSize / 2);
@@ -128,6 +135,7 @@ export default function App() {
     });
   };
 
+  // 繪製城市轉盤 (僅限本島區域)
   const drawCityWheel = (angle) => {
     const canvas = cityCanvasRef.current;
     if (!canvas || !regionId) return;
@@ -147,6 +155,7 @@ export default function App() {
       ctx.arc(centerX, centerY, radius, curA, curA + arc);
       ctx.fill();
       ctx.stroke();
+      
       ctx.save();
       ctx.translate(centerX, centerY);
       ctx.rotate(curA + arc / 2);
@@ -162,6 +171,7 @@ export default function App() {
     if (regions.length > 0) drawRegionWheel(0);
   }, [regions]);
 
+  // 控制第一個轉盤
   const handleRegionClick = () => {
     if (!isSpinningRegion) {
       setRegionId(null); setSelectedCity(null); setShowResult(false);
@@ -178,6 +188,7 @@ export default function App() {
     }
   };
 
+  // 處理旋轉減速邏輯
   useEffect(() => {
     if (isStoppingRegion) {
       const decay = () => {
@@ -186,7 +197,9 @@ export default function App() {
           velocityRef.current = 0;
           setIsSpinningRegion(false);
           setIsStoppingRegion(false);
+          
           const totalWeight = regions.reduce((acc, r) => acc + r.weight, 0);
+          // 根據指針位置 (右側) 計算中獎者
           const normalizedAngle = (2 * Math.PI - (regionRotationRef.current % (2 * Math.PI))) % (2 * Math.PI);
           let acc = 0;
           let winner = regions[0];
@@ -209,6 +222,7 @@ export default function App() {
     if(regionId && !regions.find(r=>r.id===regionId).isIsland) drawCityWheel(0);
   }, [regionId, regions]);
 
+  // 第二個轉盤 (城市) 的旋轉動畫
   const spinCity = () => {
     setIsSpinningCity(true); setShowResult(false);
     const cities = TAIWAN_DATA[regionId].cities;
@@ -233,6 +247,7 @@ export default function App() {
     requestAnimationFrame(anim);
   };
 
+  // 根據選擇結果篩選對應資料
   const resultData = showResult ? (regions.find(r=>r.id===regionId).isIsland ? TAIWAN_DATA.islands[regionId] : TAIWAN_DATA[regionId].details[selectedCity]) : null;
 
   return (
@@ -245,8 +260,9 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12">
+        {/* 左側：互動轉盤區 */}
         <div className="bg-[#faedcd] p-8 rounded-[3rem] shadow-xl border-4 border-white flex flex-col items-center">
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 w-full flex flex-col items-center">
             <h2 className="text-xl font-bold mb-6 flex items-center justify-center gap-2">
               <Compass className="text-[#bc6c25]" /> 第一步：選擇方位
             </h2>
@@ -254,10 +270,11 @@ export default function App() {
               <canvas ref={regionCanvasRef} width={320} height={320} className="rounded-full" />
               <button 
                 onClick={handleRegionClick}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-[#bc6c25] text-white font-black shadow-2xl transition-transform active:scale-90"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-[#bc6c25] text-white font-black shadow-2xl transition-transform active:scale-90 z-20"
               >
                 {isSpinningRegion ? (isStoppingRegion ? '等候' : '停止') : '開始'}
               </button>
+              {/* 指針 */}
               <div className="absolute top-1/2 -right-4 -translate-y-1/2 w-0 h-0 border-y-[15px] border-y-transparent border-r-[30px] border-r-[#283618]"></div>
             </div>
             <button 
@@ -267,19 +284,20 @@ export default function App() {
               }}
               className="mt-6 text-xs font-bold text-[#bc6c25] hover:underline"
             >
-              🎲 手動重置隨機位置
+              🎲 重新洗牌
             </button>
           </div>
 
+          {/* 城市轉盤區：僅在本島區域被選中時顯示 */}
           {regionId && !regions.find(r=>r.id===regionId).isIsland && (
-            <div className="text-center animate-in fade-in zoom-in duration-500 w-full pt-8 border-t border-[#d4a373]/30">
+            <div className="text-center animate-in fade-in zoom-in duration-500 w-full pt-8 border-t border-[#d4a373]/30 flex flex-col items-center">
               <h2 className="text-xl font-bold mb-6">第二步：決定城市</h2>
               <div className="relative inline-block bg-white p-4 rounded-full shadow-inner border-4 border-[#e9edc9]">
                 <canvas ref={cityCanvasRef} width={240} height={240} className="rounded-full" />
                 <button 
                   onClick={spinCity}
                   disabled={isSpinningCity}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-[#283618] text-white font-bold disabled:opacity-50"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-[#283618] text-white font-bold disabled:opacity-50 z-20"
                 >
                   GO
                 </button>
@@ -289,15 +307,17 @@ export default function App() {
           )}
         </div>
 
+        {/* 右側：結果展示區 */}
         <div className="flex flex-col gap-6">
           {!showResult ? (
             <div className="h-full flex flex-col items-center justify-center bg-white/50 border-4 border-dashed border-[#d4a373]/30 rounded-[3rem] p-12 text-center text-[#bc6c25]/40">
               <MapPin size={80} className="mb-4 opacity-20" />
               <p className="text-xl font-bold">等待命運的指引...</p>
-              <p className="text-xs mt-2 italic opacity-60">蘭嶼 & 金馬各佔 5% 機率</p>
+              <p className="text-xs mt-2 italic opacity-60">蘭嶼 & 金門馬祖各佔 5% 機率</p>
             </div>
           ) : (
             <div className="animate-in slide-in-from-bottom-10 duration-700">
+              {/* 主標題區 */}
               <div className="bg-[#bc6c25] p-8 rounded-[3rem] text-[#fefae0] shadow-2xl relative overflow-hidden mb-8">
                 <div className="relative z-10">
                   <span className="text-xs font-black tracking-widest uppercase opacity-70">本日目的地</span>
@@ -311,9 +331,11 @@ export default function App() {
                 <Anchor className="absolute -bottom-6 -right-6 w-48 h-48 opacity-10 rotate-12" />
               </div>
 
+              {/* 詳細資訊區 */}
               <div className="grid gap-6">
+                {/* 住宿 */}
                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-[#e9edc9]">
-                  <h3 className="font-black text-lg mb-4 flex items-center gap-2 border-b-2 border-[#fefae0] pb-2">
+                  <h3 className="font-black text-lg mb-4 flex items-center gap-2 border-b-2 border-[#fefae0] pb-2 text-[#283618]">
                     <Star className="text-[#dda15e] fill-[#dda15e]" size={20} /> 精選住宿推薦
                   </h3>
                   <div className="space-y-4">
@@ -329,20 +351,21 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-6">
+                {/* 景點與美食 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-[#e9edc9]">
-                    <h3 className="font-black text-sm mb-3 text-[#bc6c25]">📍 必遊景點</h3>
+                    <h3 className="font-black text-sm mb-3 text-[#bc6c25] uppercase tracking-wider">📍 必遊景點</h3>
                     <ul className="space-y-2">
                       {resultData.attractions.map((a, i) => (
-                        <li key={i} className="text-xs font-bold flex items-center gap-2 bg-[#fefae0] p-2 rounded-lg"><Tent size={12}/> {a}</li>
+                        <li key={i} className="text-xs font-bold flex items-center gap-2 bg-[#fefae0] p-2 rounded-lg text-[#283618]"><Tent size={12}/> {a}</li>
                       ))}
                     </ul>
                   </div>
                   <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-[#e9edc9]">
-                    <h3 className="font-black text-sm mb-3 text-[#bc6c25]">🍜 在地美食</h3>
+                    <h3 className="font-black text-sm mb-3 text-[#bc6c25] uppercase tracking-wider">🍜 在地美食</h3>
                     <ul className="space-y-2">
                       {resultData.foods.map((f, i) => (
-                        <li key={i} className="text-xs font-bold flex items-center gap-2 bg-[#fefae0] p-2 rounded-lg"><Utensils size={12}/> {f}</li>
+                        <li key={i} className="text-xs font-bold flex items-center gap-2 bg-[#fefae0] p-2 rounded-lg text-[#283618]"><Utensils size={12}/> {f}</li>
                       ))}
                     </ul>
                   </div>
